@@ -21,6 +21,15 @@ data class SavedChatMessage(
     val content: String,
     val thinking: String? = null,
     val action: String? = null,
-    val imagePath: String? = null, // 新增：保存标记过动作的截图路径
-    val timestamp: Long = System.currentTimeMillis()
+    val imagePath: String? = null, // 保存标记过动作的截图路径
+    val timestamp: Long = System.currentTimeMillis(),
+    // 性能指标和尺寸
+    val screenshotMs: Long = 0,
+    val networkMs: Long = 0,
+    val executionMs: Long = 0,
+    val totalMs: Long = 0,
+    val originalWidth: Int = 0,
+    val originalHeight: Int = 0,
+    val scaledWidth: Int = 0,
+    val scaledHeight: Int = 0
 )

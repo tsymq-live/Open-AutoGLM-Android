@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,10 +31,10 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
+    viewModel: ChatViewModel,
     onNavigateToPromptLog: () -> Unit,
     onNavigateToSettings: () -> Unit
 ) {
-    val viewModel: ChatViewModel = viewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -70,6 +71,17 @@ fun MainScreen(
                     }
                 },
                 actions = {
+                    // 重新开始任务按钮
+                    if (uiState.messages.any { it.role == com.example.open_autoglm_android.ui.viewmodel.MessageRole.USER }) {
+                        IconButton(onClick = { viewModel.restartTask() }) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "重新开始任务",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    
                     IconButton(onClick = onNavigateToPromptLog) {
                         Icon(
                             imageVector = Icons.Default.Description,

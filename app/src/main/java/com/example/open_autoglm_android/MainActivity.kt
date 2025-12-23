@@ -29,6 +29,7 @@ import com.example.open_autoglm_android.ui.screen.MainScreen
 import com.example.open_autoglm_android.ui.screen.SettingsScreen
 import com.example.open_autoglm_android.ui.screen.PromptLogScreen
 import com.example.open_autoglm_android.ui.theme.OpenAutoGLMAndroidTheme
+import com.example.open_autoglm_android.ui.viewmodel.ChatViewModel
 import com.example.open_autoglm_android.ui.viewmodel.SettingsViewModel
 import com.example.open_autoglm_android.util.AccessibilityServiceHelper
 import com.example.open_autoglm_android.util.AuthHelper
@@ -50,6 +51,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnBinderReceivedListener,
     }
 
     private val settingsViewModel by viewModels<SettingsViewModel>()
+    private val chatViewModel by viewModels<ChatViewModel>()
 
      private var userService: IUserService? = null
     private val userServiceArgs = Shizuku.UserServiceArgs(ComponentName(APPLICATION_ID, UserService::class.java.name))
@@ -70,6 +72,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnBinderReceivedListener,
                 NavHost(navController = navController, Screen.Main.name) {
                     composable(Screen.Main.name) {
                         MainScreen(
+                            viewModel = chatViewModel,
                             onNavigateToPromptLog = {
                                 navController.navigate(Screen.PromptLog.name)
                             },
@@ -84,6 +87,7 @@ class MainActivity : ComponentActivity(), Shizuku.OnBinderReceivedListener,
                             color = MaterialTheme.colorScheme.background
                         ) {
                             PromptLogScreen(
+                                viewModel = chatViewModel,
                                 onBack = { navController.popBackStack() }
                             )
                         }

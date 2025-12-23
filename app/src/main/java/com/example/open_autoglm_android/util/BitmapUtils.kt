@@ -71,6 +71,22 @@ object BitmapUtils {
     }
 
     /**
+     * 缩放 Bitmap
+     * @param bitmap 原始位图
+     * @param ratio 缩放比例 (0.0 - 1.0)
+     * @return 缩放后的位图
+     */
+    fun scaleBitmap(bitmap: Bitmap, ratio: Float): Bitmap {
+        if (ratio >= 1.0f || ratio <= 0f) return bitmap
+        
+        val width = (bitmap.width * ratio).toInt().coerceAtLeast(1)
+        val height = (bitmap.height * ratio).toInt().coerceAtLeast(1)
+        
+        Log.d("BitmapUtils", "Scaling bitmap from ${bitmap.width}x${bitmap.height} to ${width}x${height} (ratio: $ratio)")
+        return Bitmap.createScaledBitmap(bitmap, width, height, true)
+    }
+
+    /**
      * 在图片上绘制点击点（渐变透明圆点）
      */
     fun drawTapMarker(bitmap: Bitmap, x: Float, y: Float): Bitmap {

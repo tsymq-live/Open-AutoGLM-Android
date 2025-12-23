@@ -26,6 +26,13 @@ data class SettingsUiState(
     val isImeSelected: Boolean = false,
     val imageCompressionEnabled: Boolean = false,
     val imageCompressionLevel: Int = 50,
+    val imageScalingEnabled: Boolean = false,
+    val imageScalingRatio: Int = 50,
+    // Model Parameters
+    val maxTokens: Int = 3000,
+    val temperature: Double = 0.0,
+    val topP: Double = 0.85,
+    val frequencyPenalty: Double = 0.2,
     val isLoading: Boolean = false,
     val saveSuccess: Boolean? = null,
     val error: String? = null
@@ -80,6 +87,36 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             preferencesRepository.imageCompressionLevel.collect { level ->
                 _uiState.value = _uiState.value.copy(imageCompressionLevel = level)
+            }
+        }
+        viewModelScope.launch {
+            preferencesRepository.imageScalingEnabled.collect { enabled ->
+                _uiState.value = _uiState.value.copy(imageScalingEnabled = enabled)
+            }
+        }
+        viewModelScope.launch {
+            preferencesRepository.imageScalingRatio.collect { ratio ->
+                _uiState.value = _uiState.value.copy(imageScalingRatio = ratio)
+            }
+        }
+        viewModelScope.launch {
+            preferencesRepository.maxTokens.collect { value ->
+                _uiState.value = _uiState.value.copy(maxTokens = value)
+            }
+        }
+        viewModelScope.launch {
+            preferencesRepository.temperature.collect { value ->
+                _uiState.value = _uiState.value.copy(temperature = value)
+            }
+        }
+        viewModelScope.launch {
+            preferencesRepository.topP.collect { value ->
+                _uiState.value = _uiState.value.copy(topP = value)
+            }
+        }
+        viewModelScope.launch {
+            preferencesRepository.frequencyPenalty.collect { value ->
+                _uiState.value = _uiState.value.copy(frequencyPenalty = value)
             }
         }
     }
@@ -140,6 +177,20 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             _uiState.value = _uiState.value.copy(imageCompressionLevel = level)
         }
     }
+
+    fun setImageScalingEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.saveImageScalingEnabled(enabled)
+            _uiState.value = _uiState.value.copy(imageScalingEnabled = enabled)
+        }
+    }
+
+    fun setImageScalingRatio(ratio: Int) {
+        viewModelScope.launch {
+            preferencesRepository.saveImageScalingRatio(ratio)
+            _uiState.value = _uiState.value.copy(imageScalingRatio = ratio)
+        }
+    }
     
     private fun updateFloatingWindowService(enabled: Boolean) {
         val context = getApplication<Application>()
@@ -161,6 +212,22 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun updateModelName(modelName: String) {
         _uiState.value = _uiState.value.copy(modelName = modelName)
     }
+
+    fun updateMaxTokens(value: Int) {
+        _uiState.value = _uiState.value.copy(maxTokens = value)
+    }
+
+    fun updateTemperature(value: Double) {
+        _uiState.value = _uiState.value.copy(temperature = value)
+    }
+
+    fun updateTopP(value: Double) {
+        _uiState.value = _uiState.value.copy(topP = value)
+    }
+
+    fun updateFrequencyPenalty(value: Double) {
+        _uiState.value = _uiState.value.copy(frequencyPenalty = value)
+    }
     
     fun saveSettings() {
         viewModelScope.launch {
@@ -169,6 +236,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 preferencesRepository.saveApiKey(_uiState.value.apiKey)
                 preferencesRepository.saveBaseUrl(_uiState.value.baseUrl)
                 preferencesRepository.saveModelName(_uiState.value.modelName)
+                preferencesRepository.saveMaxTokens(_uiState.value.maxTokens)
+                preferencesRepository.saveTemperature(_uiState.value.temperature)
+                preferencesRepository.saveTopP(_uiState.value.topP)
+                preferencesRepository.saveFrequencyPenalty(_uiState.value.frequencyPenalty)
                 _uiState.value = _uiState.value.copy(isLoading = false, saveSuccess = true)
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(isLoading = false, error = "保存失败: ${e.message}")

@@ -7,6 +7,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -17,7 +18,7 @@ import com.example.open_autoglm_android.ui.viewmodel.ChatViewModel
 @Composable
 fun PromptLogScreen(
     modifier: Modifier = Modifier,
-    viewModel: ChatViewModel = viewModel(),
+    viewModel: ChatViewModel,
     onBack: () -> Unit,
 ) {
     Scaffold(
@@ -33,7 +34,8 @@ fun PromptLogScreen(
             )
         }
     ) { paddingValues ->
-        val log = viewModel.getFullPromptLog()
+        // 使用 remember 确保在重组时能获取到最新的日志
+        val log = remember(viewModel.uiState) { viewModel.getFullPromptLog() }
         val scrollState = rememberScrollState()
         
         Column(

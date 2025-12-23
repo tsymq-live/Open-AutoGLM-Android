@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
@@ -22,6 +23,14 @@ object PreferenceKeys {
     val INPUT_MODE = intPreferencesKey("input_mode")
     val IMAGE_COMPRESSION_ENABLED = booleanPreferencesKey("image_compression_enabled")
     val IMAGE_COMPRESSION_LEVEL = intPreferencesKey("image_compression_level")
+    val IMAGE_SCALING_ENABLED = booleanPreferencesKey("image_scaling_enabled")
+    val IMAGE_SCALING_RATIO = intPreferencesKey("image_scaling_ratio")
+    
+    // Model Parameters
+    val MAX_TOKENS = intPreferencesKey("max_tokens")
+    val TEMPERATURE = doublePreferencesKey("temperature")
+    val TOP_P = doublePreferencesKey("top_p")
+    val FREQUENCY_PENALTY = doublePreferencesKey("frequency_penalty")
 }
 
 enum class InputMode(val value: Int) {
@@ -62,6 +71,30 @@ class PreferencesRepository(private val context: Context) {
 
     val imageCompressionLevel: Flow<Int> = context.dataStore.data.map { preferences ->
         preferences[PreferenceKeys.IMAGE_COMPRESSION_LEVEL] ?: 50
+    }
+
+    val imageScalingEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PreferenceKeys.IMAGE_SCALING_ENABLED] ?: false
+    }
+
+    val imageScalingRatio: Flow<Int> = context.dataStore.data.map { preferences ->
+        preferences[PreferenceKeys.IMAGE_SCALING_RATIO] ?: 50
+    }
+
+    val maxTokens: Flow<Int> = context.dataStore.data.map { preferences ->
+        preferences[PreferenceKeys.MAX_TOKENS] ?: 3000
+    }
+
+    val temperature: Flow<Double> = context.dataStore.data.map { preferences ->
+        preferences[PreferenceKeys.TEMPERATURE] ?: 0.0
+    }
+
+    val topP: Flow<Double> = context.dataStore.data.map { preferences ->
+        preferences[PreferenceKeys.TOP_P] ?: 0.85
+    }
+
+    val frequencyPenalty: Flow<Double> = context.dataStore.data.map { preferences ->
+        preferences[PreferenceKeys.FREQUENCY_PENALTY] ?: 0.2
     }
     
     suspend fun saveApiKey(apiKey: String) {
@@ -105,6 +138,42 @@ class PreferencesRepository(private val context: Context) {
             preferences[PreferenceKeys.IMAGE_COMPRESSION_LEVEL] = level
         }
     }
+
+    suspend fun saveImageScalingEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferenceKeys.IMAGE_SCALING_ENABLED] = enabled
+        }
+    }
+
+    suspend fun saveImageScalingRatio(ratio: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferenceKeys.IMAGE_SCALING_RATIO] = ratio
+        }
+    }
+
+    suspend fun saveMaxTokens(maxTokens: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferenceKeys.MAX_TOKENS] = maxTokens
+        }
+    }
+
+    suspend fun saveTemperature(temperature: Double) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferenceKeys.TEMPERATURE] = temperature
+        }
+    }
+
+    suspend fun saveTopP(topP: Double) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferenceKeys.TOP_P] = topP
+        }
+    }
+
+    suspend fun saveFrequencyPenalty(frequencyPenalty: Double) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferenceKeys.FREQUENCY_PENALTY] = frequencyPenalty
+        }
+    }
     
     suspend fun getApiKeySync(): String? {
         return context.dataStore.data.map { it[PreferenceKeys.API_KEY] }.firstOrNull()
@@ -144,5 +213,41 @@ class PreferencesRepository(private val context: Context) {
         return context.dataStore.data.map { 
             it[PreferenceKeys.IMAGE_COMPRESSION_LEVEL] ?: 50
         }.firstOrNull() ?: 50
+    }
+
+    suspend fun getImageScalingEnabledSync(): Boolean {
+        return context.dataStore.data.map { 
+            it[PreferenceKeys.IMAGE_SCALING_ENABLED] ?: false
+        }.firstOrNull() ?: false
+    }
+
+    suspend fun getImageScalingRatioSync(): Int {
+        return context.dataStore.data.map { 
+            it[PreferenceKeys.IMAGE_SCALING_RATIO] ?: 50
+        }.firstOrNull() ?: 50
+    }
+
+    suspend fun getMaxTokensSync(): Int {
+        return context.dataStore.data.map { 
+            it[PreferenceKeys.MAX_TOKENS] ?: 3000
+        }.firstOrNull() ?: 3000
+    }
+
+    suspend fun getTemperatureSync(): Double {
+        return context.dataStore.data.map { 
+            it[PreferenceKeys.TEMPERATURE] ?: 0.0
+        }.firstOrNull() ?: 0.0
+    }
+
+    suspend fun getTopPSync(): Double {
+        return context.dataStore.data.map { 
+            it[PreferenceKeys.TOP_P] ?: 0.85
+        }.firstOrNull() ?: 0.85
+    }
+
+    suspend fun getFrequencyPenaltySync(): Double {
+        return context.dataStore.data.map { 
+            it[PreferenceKeys.FREQUENCY_PENALTY] ?: 0.2
+        }.firstOrNull() ?: 0.2
     }
 }

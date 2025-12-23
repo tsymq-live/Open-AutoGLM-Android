@@ -7,16 +7,19 @@ import android.provider.Settings
 import android.view.inputmethod.InputMethodManager
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -27,6 +30,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.open_autoglm_android.data.InputMode
 import com.example.open_autoglm_android.ui.viewmodel.SettingsViewModel
 import com.example.open_autoglm_android.util.AuthHelper
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -226,6 +230,89 @@ fun SettingsScreen(
 
             Divider()
 
+            // 模型参数
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = "模型参数", style = MaterialTheme.typography.titleMedium)
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Max Tokens
+                    Text(
+                        text = "Max Tokens: ${uiState.maxTokens}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Slider(
+                        value = uiState.maxTokens.coerceIn(2000, 5000).toFloat(),
+                        onValueChange = { viewModel.updateMaxTokens(it.roundToInt()) },
+                        valueRange = 2000f..5000f,
+                        steps = 29 // (5000 - 2000) / 100 - 1 = 29
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Temperature
+                    Text(
+                        text = "Temperature: ${String.format(Locale.US, "%.2f", uiState.temperature)}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Slider(
+                        value = uiState.temperature.toFloat(),
+                        onValueChange = { viewModel.updateTemperature(it.toDouble()) },
+                        valueRange = 0.0f..1.0f,
+                        steps = 20
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Top P
+                    Text(
+                        text = "Top P: ${String.format(Locale.US, "%.2f", uiState.topP)}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Slider(
+                        value = uiState.topP.toFloat(),
+                        onValueChange = { viewModel.updateTopP(it.toDouble()) },
+                        valueRange = 0.0f..1.0f,
+                        steps = 20
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Frequency Penalty
+                    Text(
+                        text = "Frequency Penalty: ${String.format(Locale.US, "%.2f", uiState.frequencyPenalty)}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Slider(
+                        value = uiState.frequencyPenalty.toFloat(),
+                        onValueChange = { viewModel.updateFrequencyPenalty(it.toDouble()) },
+                        valueRange = -2.0f..2.0f,
+                        steps = 40
+                    )
+                }
+            }
+
+            Divider()
+
             // 实验型功能
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -251,6 +338,7 @@ fun SettingsScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    // 图片压缩
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -280,6 +368,41 @@ fun SettingsScreen(
                             onValueChange = { viewModel.setImageCompressionLevel(it.roundToInt()) },
                             valueRange = 10f..100f,
                             steps = 8
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 图片缩放
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "图片缩放", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                text = "缩小图片能够提升模型响应速度，缩放过小可能导致识别困难",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Switch(
+                            checked = uiState.imageScalingEnabled,
+                            onCheckedChange = { viewModel.setImageScalingEnabled(it) }
+                        )
+                    }
+
+                    if (uiState.imageScalingEnabled) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "缩放比例: ${uiState.imageScalingRatio}%",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Slider(
+                            value = uiState.imageScalingRatio.toFloat(),
+                            onValueChange = { viewModel.setImageScalingRatio(it.roundToInt()) },
+                            valueRange = 25f..75f,
+                            steps = 9 // (75-25)/5 - 1 = 9 steps between, results in 25, 30, 35... 75
                         )
                     }
                 }

@@ -56,15 +56,19 @@ class ModelClient(
      */
     suspend fun request(
         messages: List<ChatMessage>,
-        modelName: String
+        modelName: String,
+        maxTokens: Int = 3000,
+        temperature: Double = 0.0,
+        topP: Double = 0.85,
+        frequencyPenalty: Double = 0.2
     ): ModelResponse {
         val request = ChatRequest(
             model = modelName,
             messages = messages,
-            maxTokens = 3000,
-            temperature = 0.0,
-            topP = 0.85,
-            frequencyPenalty = 0.2,
+            maxTokens = maxTokens,
+            temperature = temperature,
+            topP = topP,
+            frequencyPenalty = frequencyPenalty,
             stream = false
         )
         
