@@ -13,6 +13,7 @@ import com.example.open_autoglm_android.data.database.SavedChatMessage
 import com.example.open_autoglm_android.domain.ActionExecutor
 import com.example.open_autoglm_android.domain.AppRegistry
 import com.example.open_autoglm_android.domain.ExecuteResult
+import com.example.open_autoglm_android.domain.VirtualDisplayActionExecutor
 import com.example.open_autoglm_android.network.ModelClient
 import com.example.open_autoglm_android.network.dto.ChatMessage as NetworkChatMessage
 import com.example.open_autoglm_android.service.AutoGLMAccessibilityService
@@ -20,6 +21,7 @@ import com.example.open_autoglm_android.service.FloatingWindowService
 import com.example.open_autoglm_android.util.BitmapUtils
 import com.example.open_autoglm_android.util.DeviceUtils
 import com.example.open_autoglm_android.util.InputMethodHelper
+import com.example.open_autoglm_android.virtualdisplay.VirtualDisplayController
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -60,6 +62,7 @@ data class ChatUiState(
     val error: String? = null,
     val currentApp: String? = null,
     val taskCompletedMessage: String? = null,
+    val virtualDisplayEnabled: Boolean = false,
     val conversations: List<Conversation> = emptyList(),
     val currentConversationId: String? = null,
     val currentConversationTitle: String? = null,
@@ -76,6 +79,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     
     private var modelClient: ModelClient? = null
     private var actionExecutor: ActionExecutor? = null
+    private val virtualDisplayController = VirtualDisplayController(application)
+    private val virtualDisplayActionExecutor = VirtualDisplayActionExecutor(application.applicationContext)
     private var currentTaskJob: Job? = null
     
     // 维护对话上下文（仅用于发送给模型，包含图片等大数据，不持久化）
@@ -120,6 +125,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             launch {
                 AutoGLMAccessibilityService.getInstance()?.currentApp?.collect { app ->
                     _uiState.value = _uiState.value.copy(currentApp = app)
+                }
+            }
+
+            launch {
+                preferencesRepository.virtualDisplayEnabled.collect { enabled ->
+                    _uiState.value = _uiState.value.copy(virtualDisplayEnabled = enabled)
                 }
             }
             
@@ -346,11 +357,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             sendMessage(content)
         }
     }
+
+    fun setVirtualDisplayEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesRepository.saveVirtualDisplayEnabled(enabled)
+        }
+    }
     
     private suspend fun executeTaskLoop(userPrompt: String, modelName: String) {
-        val accessibilityService = AutoGLMAccessibilityService.getInstance() ?: return
         val client = modelClient ?: return
-        val executor = actionExecutor ?: return
+
+        val useVirtualDisplay = preferencesRepository.getVirtualDisplayEnabledSync()
+        val accessibilityService = AutoGLMAccessibilityService.getInstance()
+        val executor = actionExecutor
+        if (!useVirtualDisplay && (accessibilityService == null || executor == null)) return
         
         var stepCount = 0
         val maxSteps = 50
@@ -366,6 +386,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val temperature = preferencesRepository.getTemperatureSync()
         val topP = preferencesRepository.getTopPSync()
         val frequencyPenalty = preferencesRepository.getFrequencyPenaltySync()
+
+        if (useVirtualDisplay) {
+            val dm = getApplication<Application>().resources.displayMetrics
+            FloatingWindowService.getInstance()?.updateStatus("执行中", 0, "启动虚拟屏...")
+            val ok = virtualDisplayController.ensureReady(
+                width = dm.widthPixels,
+                height = dm.heightPixels,
+                dpi = dm.densityDpi,
+            )
+            if (!ok) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "虚拟屏启动失败：请确认已授予 Shizuku shell 权限，且 shower-server.jar 已适配当前包名广播"
+                )
+                return
+            }
+        }
         
         while (stepCount < maxSteps) {
             val stepStartTime = System.currentTimeMillis()
@@ -378,21 +415,34 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             Log.d("ChatViewModel", "执行步骤 $stepCount")
             FloatingWindowService.getInstance()?.updateStatus("执行中", stepCount, "正在检测当前状态...")
 
-            val currentApp = accessibilityService.safeCurrentApp
+            val currentApp = if (useVirtualDisplay) {
+                "VirtualDisplay"
+            } else {
+                accessibilityService?.safeCurrentApp
+            }
             val myPackageName = getApplication<Application>().packageName
-            val isAutoGLMForeground = currentApp == myPackageName
+            val isAutoGLMForeground = !useVirtualDisplay && currentApp == myPackageName
 
-            if (isAutoGLMForeground && stepCount > 0) {
+            if (!useVirtualDisplay && isAutoGLMForeground && stepCount > 0) {
                 FloatingWindowService.getInstance()?.updateStatus("执行中", stepCount, "等待切回目标应用...")
                 delay(2000)
                 continue
             }
             
             val screenshotStartTime = System.currentTimeMillis()
-            val originalScreenshot = if (isAutoGLMForeground) null else accessibilityService.takeScreenshotSuspend()
+            val originalScreenshot = when {
+                useVirtualDisplay -> virtualDisplayController.takeScreenshotBitmap()
+                isAutoGLMForeground -> null
+                else -> accessibilityService?.takeScreenshotSuspend()
+            }
             val screenshotDuration = System.currentTimeMillis() - screenshotStartTime
             
-            if (originalScreenshot == null && !isAutoGLMForeground) {
+            if (useVirtualDisplay && originalScreenshot == null) {
+                _uiState.value = _uiState.value.copy(isLoading = false, error = "无法获取虚拟屏截图")
+                return
+            }
+
+            if (!useVirtualDisplay && originalScreenshot == null && !isAutoGLMForeground) {
                 _uiState.value = _uiState.value.copy(isLoading = false, error = "无法获取屏幕截图")
                 return
             }
@@ -449,7 +499,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             FloatingWindowService.getInstance()?.updateStatus("执行中", stepCount, "执行动作...")
             
             val executionStartTime = System.currentTimeMillis()
-            val result = actionExecutor?.execute(response.action, realWidth, realHeight) ?: ExecuteResult(false, "ActionExecutor is null")
+            val result = if (useVirtualDisplay) {
+                virtualDisplayActionExecutor.execute(response.action, realWidth, realHeight)
+            } else {
+                actionExecutor?.execute(response.action, realWidth, realHeight) ?: ExecuteResult(false, "ActionExecutor is null")
+            }
             val executionDuration = System.currentTimeMillis() - executionStartTime
             
             // 生成标记过的截图
@@ -497,7 +551,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val completionMessage = extractFinishMessage(response.action) ?: result.message ?: resultMessageFallback(response.action)
                 FloatingWindowService.getInstance()?.updateStatus("已完成", stepCount, completionMessage)
                 _uiState.value = _uiState.value.copy(isLoading = false, taskCompletedMessage = completionMessage)
-                executor.bringAppToForeground()
+                executor?.bringAppToForeground()
                 return
             }
             
@@ -505,7 +559,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val completionMessage = result.message ?: "任务已完成"
                 FloatingWindowService.getInstance()?.updateStatus("已完成", stepCount, completionMessage)
                 _uiState.value = _uiState.value.copy(isLoading = false, taskCompletedMessage = completionMessage)
-                executor.bringAppToForeground()
+                executor?.bringAppToForeground()
                 return
             }
             
@@ -513,7 +567,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 retryCount++
                 if (retryCount >= 10) {
                     _uiState.value = _uiState.value.copy(isLoading = false, error = result.message ?: "执行动作失败")
-                    executor.bringAppToForeground()
+                    executor?.bringAppToForeground()
                     return
                 }
                 delay(800)
@@ -528,7 +582,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         
         FloatingWindowService.getInstance()?.updateStatus("已停止", stepCount, "达到最大步数限制")
         _uiState.value = _uiState.value.copy(isLoading = false, error = "达到最大步数限制")
-        executor.bringAppToForeground()
+        executor?.bringAppToForeground()
     }
     
     fun getFullPromptLog(): String {

@@ -21,4 +21,8 @@ dependencyResolutionManagement {
 
 rootProject.name = "Open-AutoGLM-Android"
 include(":app")
+
+// VirtualDisplay (Shower) client library
+include(":showerclient")
+project(":showerclient").projectDir = file("virtual-display/android/showerclient")
  

@@ -32,11 +32,13 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import com.ai.assistance.showerclient.ui.ShowerSurfaceView
 import com.example.open_autoglm_android.data.database.Conversation
 import com.example.open_autoglm_android.ui.viewmodel.ChatViewModel
 import com.example.open_autoglm_android.ui.viewmodel.MessageRole
@@ -107,6 +109,51 @@ fun ChatScreen(
                     TextButton(onClick = { viewModel.clearError() }) {
                         Text("关闭")
                     }
+                }
+            }
+        }
+
+        ElevatedCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "虚拟屏执行",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "需要 Shizuku shell 权限；截图/点击将作用于虚拟屏",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Switch(
+                        checked = uiState.virtualDisplayEnabled,
+                        onCheckedChange = { viewModel.setVirtualDisplayEnabled(it) }
+                    )
+                }
+
+                if (uiState.virtualDisplayEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    AndroidView(
+                        factory = { ctx -> ShowerSurfaceView(ctx) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(9f / 16f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    )
                 }
             }
         }

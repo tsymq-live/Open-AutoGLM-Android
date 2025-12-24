@@ -117,6 +117,9 @@ dependencies {
     // Shizuku SDK for advanced permissions
     implementation(libs.shizuku.api)
     implementation(libs.shizuku.provider)
+
+    // Virtual Display (Shower) client
+    implementation(project(":showerclient"))
     
     // Testing
     testImplementation(libs.junit)

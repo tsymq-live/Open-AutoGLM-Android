@@ -29,6 +29,7 @@
     </queries>
 
     <application
+        android:name=".OpenAutoGLMApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -107,6 +108,15 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Shower Binder handoff receiver (VirtualDisplay) -->
+        <receiver
+            android:name=".virtualdisplay.ShowerBinderReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.ai.assistance.operit.action.SHOWER_BINDER_READY" />
             </intent-filter>
         </receiver>
         

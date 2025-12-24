@@ -20,12 +20,20 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
-# --- Shizuku ---
--dontwarn rikka.shizuku.**
--keep class rikka.shizuku.** { *; }
+-keep class com.ai.assistance.shower.Main {
+    public static void main(java.lang.String[]);
+}
 
-# If Shizuku internals are accessed via reflection, keep these members.
--keepclassmembers class rikka.shizuku.Shizuku { *; }
+# Keep Shower binder IPC types so they are not obfuscated when used across
+# the shower-server.jar (shell process) and the Operit app process.
+-keep class com.ai.assistance.shower.ShowerBinderContainer {
+    *;
+}
 
-# Keep our AIDL interface used by Shizuku UserService binding.
--keep class com.example.open_autoglm_android.IUserService { *; }
+-keep class com.ai.assistance.shower.IShowerService {
+    *;
+}
+
+-keep class com.ai.assistance.shower.IShowerVideoSink {
+    *;
+}

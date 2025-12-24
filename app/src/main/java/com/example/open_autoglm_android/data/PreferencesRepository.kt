@@ -25,6 +25,9 @@ object PreferenceKeys {
     val IMAGE_COMPRESSION_LEVEL = intPreferencesKey("image_compression_level")
     val IMAGE_SCALING_ENABLED = booleanPreferencesKey("image_scaling_enabled")
     val IMAGE_SCALING_RATIO = intPreferencesKey("image_scaling_ratio")
+
+    // Virtual Display (Shower)
+    val VIRTUAL_DISPLAY_ENABLED = booleanPreferencesKey("virtual_display_enabled")
     
     // Model Parameters
     val MAX_TOKENS = intPreferencesKey("max_tokens")
@@ -79,6 +82,10 @@ class PreferencesRepository(private val context: Context) {
 
     val imageScalingRatio: Flow<Int> = context.dataStore.data.map { preferences ->
         preferences[PreferenceKeys.IMAGE_SCALING_RATIO] ?: 50
+    }
+
+    val virtualDisplayEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
+        preferences[PreferenceKeys.VIRTUAL_DISPLAY_ENABLED] ?: false
     }
 
     val maxTokens: Flow<Int> = context.dataStore.data.map { preferences ->
@@ -148,6 +155,12 @@ class PreferencesRepository(private val context: Context) {
     suspend fun saveImageScalingRatio(ratio: Int) {
         context.dataStore.edit { preferences ->
             preferences[PreferenceKeys.IMAGE_SCALING_RATIO] = ratio
+        }
+    }
+
+    suspend fun saveVirtualDisplayEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferenceKeys.VIRTUAL_DISPLAY_ENABLED] = enabled
         }
     }
 
@@ -225,6 +238,12 @@ class PreferencesRepository(private val context: Context) {
         return context.dataStore.data.map { 
             it[PreferenceKeys.IMAGE_SCALING_RATIO] ?: 50
         }.firstOrNull() ?: 50
+    }
+
+    suspend fun getVirtualDisplayEnabledSync(): Boolean {
+        return context.dataStore.data.map {
+            it[PreferenceKeys.VIRTUAL_DISPLAY_ENABLED] ?: false
+        }.firstOrNull() ?: false
     }
 
     suspend fun getMaxTokensSync(): Int {
