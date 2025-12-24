@@ -11,19 +11,20 @@ object InputMethodHelper {
     private const val TAG = "InputMethodHelper"
 
     /**
-     * 获取本应用输入法的完整 ID
+     * 获取本应用输入法在系统中的正式 ID
+     * 优先从系统安装列表中获取，确保 ID 格式与系统一致（解决全路径/缩写路径不匹配问题）
      */
     fun getMyInputMethodId(context: Context): String {
         val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        // 尝试从系统已注册的列表中找，这是最准确的 ID (通常形如 "pkg/.Service")
-        val idFromSystem = imm.inputMethodList.find { it.packageName == context.packageName }?.id
-        if (idFromSystem != null) return idFromSystem
+        val myComponentName = ComponentName(context, MyInputMethodService::class.java)
 
-        // 兜底方案：手动拼接标准格式
-        return ComponentName(
-            context.packageName,
-            MyInputMethodService::class.java.name
-        ).flattenToString()
+        // 遍历所有已安装的输入法
+        val imis = imm.inputMethodList
+        val myImi = imis.find { it.component == myComponentName }
+
+        val id = myImi?.id ?: myComponentName.flattenToString()
+        Log.v(TAG, "获取输入法ID: $id")
+        return id
     }
 
     /**
