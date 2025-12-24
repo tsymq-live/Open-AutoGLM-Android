@@ -32,7 +32,9 @@ class InputController {
 
             Method m;
             try {
-                m = InputEvent.class.getMethod("setDisplayId", int.class);
+                // setDisplayId is a hidden method, must use getDeclaredMethod and setAccessible
+                m = InputEvent.class.getDeclaredMethod("setDisplayId", int.class);
+                m.setAccessible(true);
             } catch (NoSuchMethodException e) {
                 m = null;
             }
@@ -63,6 +65,7 @@ class InputController {
 
             boolean ok;
             try {
+                // mode 0 = INJECT_INPUT_EVENT_MODE_ASYNC
                 ok = (Boolean) injectInputEventMethod.invoke(inputManager, event, 0);
             } catch (java.lang.reflect.InvocationTargetException e) {
                 Throwable cause = e.getCause();
@@ -82,7 +85,7 @@ class InputController {
                 Main.logToFile("InputController.inject returned false for event=" + event, null);
             }
         } catch (Exception e) {
-            Log.e(TAG, "inject failed", e);
+            Log.e(TAG, "inject failed", x);
             Main.logToFile("InputController.inject failed: " + e.getMessage(), e);
         }
     }

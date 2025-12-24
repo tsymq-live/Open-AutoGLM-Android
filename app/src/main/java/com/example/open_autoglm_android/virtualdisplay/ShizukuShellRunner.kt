@@ -5,6 +5,7 @@ import com.ai.assistance.showerclient.ShellIdentity
 import com.ai.assistance.showerclient.ShellRunner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
@@ -88,12 +89,12 @@ class ShizukuShellRunner : ShellRunner {
         return collect(newShizukuProcess(arrayOf("su", "-c", command)), command, allowBackground = isBackground)
     }
 
-    private suspend fun collect(process: Process, command: String, allowBackground: Boolean): ShellCommandResult {
+    private suspend fun collect(process: Process, command: String, allowBackground: Boolean): ShellCommandResult = coroutineScope {
         if (allowBackground) {
             runCatching { process.inputStream.close() }
             runCatching { process.errorStream.close() }
             runCatching { process.outputStream.close() }
-            return ShellCommandResult(true, "", "", 0)
+            return@coroutineScope ShellCommandResult(true, "", "", 0)
         }
 
         try {
@@ -103,7 +104,7 @@ class ShizukuShellRunner : ShellRunner {
             val stdout = stdoutDeferred.await()
             val stderr = stderrDeferred.await()
             val success = exitCode == 0 || (command.contains("grep") && exitCode == 1)
-            return ShellCommandResult(success, stdout, stderr, exitCode)
+            ShellCommandResult(success, stdout, stderr, exitCode)
         } finally {
             runCatching { process.inputStream.close() }
             runCatching { process.errorStream.close() }

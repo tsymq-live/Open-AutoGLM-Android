@@ -145,12 +145,17 @@ fun ChatScreen(
                 }
 
                 if (uiState.virtualDisplayEnabled) {
+                    // 根据设备实际比例修正显示，避免固定 9:16 导致的变形
+                    val dm = LocalContext.current.resources.displayMetrics
+                    val aspectRatio = dm.widthPixels.toFloat() / dm.heightPixels.toFloat()
+                    
                     Spacer(modifier = Modifier.height(8.dp))
                     AndroidView(
                         factory = { ctx -> ShowerSurfaceView(ctx) },
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(9f / 16f)
+                            .width(140.dp) // 缩小预览窗口尺寸
+                            .align(Alignment.CenterHorizontally) // 居中显示
+                            .aspectRatio(aspectRatio)
                             .clip(RoundedCornerShape(12.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                     )

@@ -42,7 +42,7 @@ object ShowerServerManager {
 
         val appContext = context.applicationContext
         val jarFile = try {
-            copyJarToExternalDir(appContext)
+            copyJarToTempDir(appContext)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to copy shower-server.jar from assets", e)
             return false
@@ -66,7 +66,7 @@ object ShowerServerManager {
             )
         }
 
-        // 3) Copy the jar from /sdcard/Download/Operit to /data/local/tmp using shell identity,
+        // 3) Copy the jar from accessible temp dir to /data/local/tmp using shell identity,
         // so that the resulting file is owned by the shell user.
         val copyCmd = "cp ${jarFile.absolutePath} $remoteJarPath"
         Log.d(TAG, "Copying Shower jar with shell identity using command: $copyCmd")
@@ -125,13 +125,12 @@ object ShowerServerManager {
     }
 
     /**
-     * Copy shower-server.jar from assets to an external directory.
-     * Host apps can override this behaviour by providing a different wrapper
-     * around [ShellRunner] if needed.
+     * Copy shower-server.jar from assets to a temporary directory accessible by shell.
+     * We use getExternalFilesDir because shell user has permissions to read from /sdcard/Android/data/
      */
-    private suspend fun copyJarToExternalDir(context: Context): File = withContext(Dispatchers.IO) {
-        // Reuse the same base directory as screenshots: /sdcard/Download/Operit
-        val baseDir = File("/sdcard/Download/Operit")
+    private suspend fun copyJarToTempDir(context: Context): File = withContext(Dispatchers.IO) {
+        // Use external files dir so Shell user can read it
+        val baseDir = context.getExternalFilesDir("temp") ?: context.filesDir
         if (!baseDir.exists()) {
             baseDir.mkdirs()
         }
@@ -147,6 +146,8 @@ object ShowerServerManager {
                 output.flush()
             }
         }
+        // Make the file world-readable so Shell can 'cp' it
+        outFile.setReadable(true, false)
         Log.d(TAG, "Copied $ASSET_JAR_NAME to ${outFile.absolutePath}")
         outFile
     }

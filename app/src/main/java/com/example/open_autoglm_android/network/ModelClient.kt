@@ -11,6 +11,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
+import kotlin.math.log
 
 data class ModelResponse(
     val thinking: String,
@@ -86,8 +87,8 @@ class ModelClient(
     /**
      * 创建系统消息
      */
-    fun createSystemMessage(): ChatMessage {
-        val systemPrompt = buildSystemPrompt()
+    fun createSystemMessage(isVirtualDisplay: Boolean = false): ChatMessage {
+        val systemPrompt = if (isVirtualDisplay) buildVirtualDisplayPrompt() else buildSystemPrompt()
         return ChatMessage(
             role = "system",
             content = listOf(ContentItem(type = "text", text = systemPrompt))
@@ -123,21 +124,21 @@ class ModelClient(
     }
 
     /**
-     * 创建用户消息（第一次调用，包含原始任务）
+     * 创建用户消息
      */
     fun createUserMessage(userPrompt: String, screenshot: Bitmap?, currentApp: String?, quality: Int = 80): ChatMessage {
         return createMessage(userPrompt, screenshot, currentApp, quality)
     }
     
     /**
-     * 创建屏幕信息消息（后续调用，只包含屏幕信息）
+     * 创建屏幕信息消息
      */
     fun createScreenInfoMessage(screenshot: Bitmap?, currentApp: String?, quality: Int = 80): ChatMessage {
         return createMessage("** Screen Info **", screenshot, currentApp, quality)
     }
     
     /**
-     * 创建助手消息（添加到上下文）
+     * 创建助手消息
      */
     fun createAssistantMessage(thinking: String, action: String): ChatMessage {
         val content = "<think>$thinking</think><answer>$action</answer>"
@@ -147,18 +148,12 @@ class ModelClient(
         )
     }
     
-    /**
-     * 构建屏幕信息（使用 JsonObject 确保转义安全）
-     */
     private fun buildScreenInfo(currentApp: String?): String {
         val json = JsonObject()
         json.addProperty("current_app", currentApp ?: "Unknown")
         return json.toString()
     }
     
-    /**
-     * 从消息中移除图片内容，只保留文本（节省 token）
-     */
     fun removeImagesFromMessage(message: ChatMessage): ChatMessage {
         val textOnlyContent = message.content.filter { it.type == "text" }
         return ChatMessage(
@@ -176,12 +171,11 @@ class ModelClient(
     }
     
     private fun buildSystemPrompt(): String {
+        Log.e("==========","普通提示词")
         return """
 今天的日期是：${java.time.LocalDate.now()}
 
-你是一个移动端任务执行智能体（AutoGLM Mobil Agent）。
-
-你需要根据当前屏幕状态与用户目标，决定并执行**下一步唯一且最合适的操作**。
+你是一个移动端任务执行智能体（AutoGLM Mobil Agent）。你当前正在通过**无障碍服务**直接操作用户的**主屏幕**。
 
 【输出格式（必须严格遵守）】
 你只能输出以下 XML 结构，不能包含任何多余文本：
@@ -194,106 +188,68 @@ class ModelClient(
 
 - do(action="Launch", app="xxx")
 - do(action="Tap", element=[x,y])
-- do(action="Tap", element=[x,y], message="重要操作")
 - do(action="Type", text="xxx")
-- do(action="Type_Name", text="xxx")
 - do(action="Swipe", start=[x1,y1], end=[x2,y2])
-- do(action="Long Press", element=[x,y])
-- do(action="Double Tap", element=[x,y])
-- do(action="Wait", duration="x seconds")
 - do(action="Back")
 - do(action="Home")
-- do(action="Interact")
-- do(action="Note", message="True")
-- do(action="Call_API", instruction="xxx")
-- do(action="Take_over", message="xxx")
+- do(action="Wait", duration="x seconds")
 - finish(message="xxx")
 
-任何未列出的 action、字段、格式，或多个指令同时输出，均视为错误。
+【执行规则】
+1. 若当前 app 不是目标 app，先执行 Launch。
+2. 任务完成后必须使用 finish 结束。
+""".trimIndent()
+    }
 
-【强制执行规则】
-1. 执行操作前，必须确认当前 app 是否为目标 app；若不是，先执行 Launch。
-2. 页面未加载完成时，最多连续 Wait 三次；仍失败则 Back 重试。
-3. 进入无关页面需优先 Back 返回。
-4. 执行下一步前必须确认上一步是否生效；点击无效需调整位置或等待重试。
-5. 任务完成后必须使用 finish 结束，并说明结果或失败原因。
+    /**
+     * 虚拟屏专用提示词
+     */
+    private fun buildVirtualDisplayPrompt(): String {
+        Log.e("==========","虚拟屏专用提示词")
+        return """
+今天的日期是：${java.time.LocalDate.now()}
 
-【执行策略（在不违反上述规则前提下使用）】
-- 找不到目标内容时可 Swipe 滑动查找。
-- 搜索无结果可调整关键词或返回上一级重试，最多三次。
-- 需要用户协助登录或验证时使用 Take_over。
-- 若多选项且无法判断，使用 Interact 询问用户。
-- 若操作失败但可继续任务，请继续并在 finish 中说明。
+你是一个移动端任务执行智能体（AutoGLM Mobil Agent）。你当前正在通过**无障碍服务**直接操作用户的**主屏幕**。
+
+【输出格式（必须严格遵守）】
+你只能输出以下 XML 结构，不能包含任何多余文本：
+
+<think>操作选择的简要理由摘要（不超过 20 字，不展开推理）</think>
+<answer>操作指令</answer>
+
+【操作指令白名单】
+你只能在 <answer> 中输出以下指令之一，且每次只能输出一个：
+
+- do(action="Tap", element=[x,y])
+- do(action="Type", text="xxx")
+- do(action="Swipe", start=[x1,y1], end=[x2,y2])
+- do(action="Back")
+- do(action="Home")
+- do(action="Wait", duration="x seconds")
+- finish(message="xxx")
+
+【执行规则】
+1. 若当前 app 不是目标 app 先找到目标 app 点击启动，严进使用Launch方法
+2. 任务完成后必须使用 finish 结束。
 """.trimIndent()
     }
     
     private fun parseResponse(content: String): ModelResponse {
-        Log.d("ModelClient", "解析响应内容: ${content.take(500)}")
-        
         var thinking = ""
         var action = ""
         
-        if (content.contains("finish(message=")) {
-            val parts = content.split("finish(message=", limit = 2)
-            thinking = parts[0].trim()
-            action = "finish(message=" + parts[1]
-        } else if (content.contains("do(action=")) {
-            val parts = content.split("do(action=", limit = 2)
-            thinking = parts[0].trim()
-            action = "do(action=" + parts[1]
-        } else if (content.contains("<answer>")) {
+        if (content.contains("<answer>")) {
             val parts = content.split("<answer>", limit = 2)
             thinking = parts[0]
                 .replace("<think>", "")
                 .replace("</think>", "")
-                .replace("<redacted_reasoning>", "")
-                .replace("</redacted_reasoning>", "")
                 .trim()
             action = parts[1].replace("</answer>", "").trim()
         } else {
             action = content.trim()
         }
         
-        if (!action.startsWith("{") && !action.startsWith("do(") && !action.startsWith("finish(")) {
-            val funcMatch = Regex("""(do|finish)\s*\([^)]+\)""", RegexOption.IGNORE_CASE).find(content)
-            if (funcMatch != null) {
-                action = funcMatch.value
-            } else {
-                val extractedJson = extractJsonFromContent(content)
-                if (extractedJson.isNotEmpty()) {
-                    action = extractedJson
-                }
-            }
-        }
-        
         return ModelResponse(thinking = thinking, action = action)
-    }
-    
-    private fun extractJsonFromContent(content: String): String {
-        var startIndex = -1
-        var braceCount = 0
-        val candidates = mutableListOf<String>()
-        
-        for (i in content.indices) {
-            when (content[i]) {
-                '{' -> {
-                    if (startIndex == -1) startIndex = i
-                    braceCount++
-                }
-                '}' -> {
-                    braceCount--
-                    if (braceCount == 0 && startIndex != -1) {
-                        val candidate = content.substring(startIndex, i + 1)
-                        try {
-                            com.google.gson.JsonParser.parseString(candidate)
-                            candidates.add(candidate)
-                        } catch (e: Exception) {}
-                        startIndex = -1
-                    }
-                }
-            }
-        }
-        return candidates.firstOrNull() ?: ""
     }
     
     private fun String.ensureTrailingSlash(): String {

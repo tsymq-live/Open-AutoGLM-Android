@@ -70,22 +70,22 @@ data class ChatUiState(
 )
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
-    
+
     private val preferencesRepository = PreferencesRepository(application)
     private val conversationRepository = ConversationRepository(application)
-    
+
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
-    
+
     private var modelClient: ModelClient? = null
     private var actionExecutor: ActionExecutor? = null
     private val virtualDisplayController = VirtualDisplayController(application)
     private val virtualDisplayActionExecutor = VirtualDisplayActionExecutor(application.applicationContext)
     private var currentTaskJob: Job? = null
-    
+
     // 维护对话上下文（仅用于发送给模型，包含图片等大数据，不持久化）
     private val messageContext = mutableListOf<NetworkChatMessage>()
-    
+
     init {
         setupFloatingWindowListeners()
         viewModelScope.launch {
@@ -93,19 +93,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val baseUrl = preferencesRepository.getBaseUrlSync()
             val apiKey = preferencesRepository.getApiKeySync() ?: "EMPTY"
             modelClient = ModelClient(baseUrl, apiKey)
-            
+
             // 初始化 ActionExecutor
             AutoGLMAccessibilityService.getInstance()?.let { service ->
                 actionExecutor = ActionExecutor(service)
             }
-            
+
             // 监听对话列表变化
             launch {
                 conversationRepository.conversations.collect { conversations ->
                     _uiState.value = _uiState.value.copy(conversations = conversations)
                 }
             }
-            
+
             // 监听当前对话变化
             launch {
                 conversationRepository.currentConversationId.collect { conversationId ->
@@ -120,7 +120,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.value = _uiState.value.copy(currentConversationTitle = conversationTitle)
                 }
             }
-            
+
             // 监听当前应用变化 (UI 实时展示)
             launch {
                 AutoGLMAccessibilityService.getInstance()?.currentApp?.collect { app ->
@@ -133,7 +133,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.value = _uiState.value.copy(virtualDisplayEnabled = enabled)
                 }
             }
-            
+
             // 如果没有对话，创建一个默认对话
             val initialConversations = conversationRepository.conversations.first()
             if (initialConversations.isEmpty()) {
@@ -150,13 +150,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             togglePause()
         }
     }
-    
+
     private fun loadConversationMessages(conversationId: String?) {
         if (conversationId == null) {
             _uiState.value = _uiState.value.copy(messages = emptyList())
             return
         }
-        
+
         viewModelScope.launch {
             val conversationWithMessages = conversationRepository.getCurrentConversation()
             if (conversationWithMessages != null) {
@@ -183,7 +183,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-    
+
     private suspend fun saveCurrentMessages() {
         val conversationId = _uiState.value.currentConversationId ?: return
         val savedMessages = _uiState.value.messages.map { msg ->
@@ -208,7 +208,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         conversationRepository.updateConversationMessages(conversationId, savedMessages)
     }
-    
+
     /**
      * 创建新对话
      */
@@ -218,7 +218,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             messageContext.clear()
         }
     }
-    
+
     /**
      * 切换对话
      */
@@ -227,7 +227,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         messageContext.clear()
         _uiState.value = _uiState.value.copy(isDrawerOpen = false, currentConversationTitle = conversationTitle)
     }
-    
+
     /**
      * 删除对话
      */
@@ -237,7 +237,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             messageContext.clear()
         }
     }
-    
+
     /**
      * 打开/关闭侧边栏
      */
@@ -248,14 +248,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun openDrawer(){
         _uiState.value =  _uiState.value.copy(isDrawerOpen = true)
     }
-    
+
     fun closeDrawer() {
         _uiState.value = _uiState.value.copy(isDrawerOpen = false)
     }
-    
+
     fun sendMessage(userInput: String) {
         if (userInput.isBlank() || _uiState.value.isLoading) return
-        
+
         val accessibilityService = AutoGLMAccessibilityService.getInstance()
         if (accessibilityService == null) {
             _uiState.value = _uiState.value.copy(
@@ -263,7 +263,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
             return
         }
-        
+
         // 清空当前对话的消息（开始新任务）
         _uiState.value = _uiState.value.copy(
             messages = emptyList(),
@@ -272,19 +272,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             isPaused = false
         )
         FloatingWindowService.getInstance()?.updatePauseStatus(false)
-        
+
         val userMessage = ChatMessage(
             id = System.currentTimeMillis().toString(),
             role = MessageRole.USER,
             content = userInput
         )
-        
+
         _uiState.value = _uiState.value.copy(
             messages = _uiState.value.messages + userMessage,
             isLoading = true,
             error = null
         )
-        
+
         currentTaskJob = viewModelScope.launch {
             try {
                 // 尝试自动切换输入法
@@ -293,11 +293,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 AppRegistry.initialize(getApplication())
-                
+
                 val baseUrl = preferencesRepository.getBaseUrlSync()
                 val apiKey = preferencesRepository.getApiKeySync() ?: "EMPTY"
                 val modelName = preferencesRepository.getModelNameSync()
-                
+
                 if (apiKey == "EMPTY" || apiKey.isEmpty()) {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
@@ -305,18 +305,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     )
                     return@launch
                 }
-                
+
                 modelClient = ModelClient(baseUrl, apiKey)
                 actionExecutor = ActionExecutor(accessibilityService)
-                
+
                 messageContext.clear()
-                
+
                 // 保存用户初始消息
                 saveCurrentMessages()
-                
+
                 // 执行任务循环
                 executeTaskLoop(userInput, modelName)
-                
+
             } catch (e: CancellationException) {
                 Log.d("ChatViewModel", "任务已取消")
                 FloatingWindowService.getInstance()?.updateStatus("已停止", 0, "用户手动停止")
@@ -363,7 +363,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             preferencesRepository.saveVirtualDisplayEnabled(enabled)
         }
     }
-    
+
     private suspend fun executeTaskLoop(userPrompt: String, modelName: String) {
         val client = modelClient ?: return
 
@@ -371,7 +371,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val accessibilityService = AutoGLMAccessibilityService.getInstance()
         val executor = actionExecutor
         if (!useVirtualDisplay && (accessibilityService == null || executor == null)) return
-        
+
         var stepCount = 0
         val maxSteps = 50
         var retryCount = 0
@@ -403,10 +403,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 return
             }
         }
-        
+
         while (stepCount < maxSteps) {
             val stepStartTime = System.currentTimeMillis()
-            
+
             while (_uiState.value.isPaused) {
                 delay(500)
                 yield()
@@ -428,7 +428,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 delay(2000)
                 continue
             }
-            
+
             val screenshotStartTime = System.currentTimeMillis()
             val originalScreenshot = when {
                 useVirtualDisplay -> virtualDisplayController.takeScreenshotBitmap()
@@ -436,7 +436,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 else -> accessibilityService?.takeScreenshotSuspend()
             }
             val screenshotDuration = System.currentTimeMillis() - screenshotStartTime
-            
+
             if (useVirtualDisplay && originalScreenshot == null) {
                 _uiState.value = _uiState.value.copy(isLoading = false, error = "无法获取虚拟屏截图")
                 return
@@ -446,30 +446,33 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _uiState.value = _uiState.value.copy(isLoading = false, error = "无法获取屏幕截图")
                 return
             }
-            
+
             val displayMetrics = getApplication<Application>().resources.displayMetrics
             val realWidth = originalScreenshot?.width ?: displayMetrics.widthPixels
             val realHeight = originalScreenshot?.height ?: displayMetrics.heightPixels
-            
+
             val modelScreenshot = if (originalScreenshot != null && scalingEnabled && scalingRatio < 1.0f) {
                 BitmapUtils.scaleBitmap(originalScreenshot, scalingRatio)
             } else {
                 originalScreenshot
             }
-            
+
             val scaledWidth = modelScreenshot?.width ?: 0
             val scaledHeight = modelScreenshot?.height ?: 0
 
             // 构建消息上下文
             if (stepCount == 0) {
-                if (messageContext.isEmpty()) messageContext.add(client.createSystemMessage())
+                // 关键点：根据是否开启虚拟屏动态创建 System Message
+                if (messageContext.isEmpty()) {
+                    messageContext.add(client.createSystemMessage(isVirtualDisplay = useVirtualDisplay))
+                }
                 messageContext.add(client.createUserMessage(userPrompt, modelScreenshot, currentApp, compressionLevel))
             } else {
                 messageContext.add(client.createScreenInfoMessage(modelScreenshot, currentApp, compressionLevel))
             }
-            
+
             FloatingWindowService.getInstance()?.updateStatus("执行中", stepCount, "调用模型...")
-            
+
             val networkStartTime = System.currentTimeMillis()
             val response = client.request(
                 messages = messageContext.toList(),
@@ -480,9 +483,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 frequencyPenalty = frequencyPenalty
             )
             val networkDuration = System.currentTimeMillis() - networkStartTime
-            
+
             messageContext.add(client.createAssistantMessage(response.thinking, response.action))
-            
+
             // 节省 token
             if (messageContext.size >= 2) {
                 val lastUserMessageIndex = messageContext.size - 2
@@ -491,13 +494,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     messageContext[lastUserMessageIndex] = client.removeImagesFromMessage(lastUserMessage)
                 }
             }
-            
+
             val isFinishAction = response.action.contains("\"_metadata\":\"finish\"") ||
-                response.action.contains("\"_metadata\": \"finish\"") ||
-                response.action.lowercase().contains("finish(")
-            
+                    response.action.contains("\"_metadata\": \"finish\"") ||
+                    response.action.lowercase().contains("finish(")
+
             FloatingWindowService.getInstance()?.updateStatus("执行中", stepCount, "执行动作...")
-            
+
             val executionStartTime = System.currentTimeMillis()
             val result = if (useVirtualDisplay) {
                 virtualDisplayActionExecutor.execute(response.action, realWidth, realHeight)
@@ -505,23 +508,29 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 actionExecutor?.execute(response.action, realWidth, realHeight) ?: ExecuteResult(false, "ActionExecutor is null")
             }
             val executionDuration = System.currentTimeMillis() - executionStartTime
-            
+
             // 生成标记过的截图
             var savedImagePath: String? = null
-            if (result.success && originalScreenshot != null && result.actionDetail != null) {
+            if (originalScreenshot != null) {
                 val detail = result.actionDetail
                 var markedBitmap: Bitmap? = null
-                when (detail.type) {
-                    "tap", "longpress", "doubletap", "type" -> if (detail.x1 != null && detail.y1 != null) markedBitmap = BitmapUtils.drawTapMarker(originalScreenshot, detail.x1, detail.y1)
-                    "swipe" -> if (detail.x1 != null && detail.y1 != null && detail.x2 != null && detail.y2 != null) markedBitmap = BitmapUtils.drawSwipeMarker(originalScreenshot, detail.x1, detail.y1, detail.x2, detail.y2)
+                if (result.success && detail != null) {
+                    when (detail.type) {
+                        "tap", "longpress", "doubletap", "type" -> if (detail.x1 != null && detail.y1 != null) markedBitmap = BitmapUtils.drawTapMarker(originalScreenshot, detail.x1, detail.y1)
+                        "swipe" -> if (detail.x1 != null && detail.y1 != null && detail.x2 != null && detail.y2 != null) markedBitmap = BitmapUtils.drawSwipeMarker(originalScreenshot, detail.x1, detail.y1, detail.x2, detail.y2)
+                    }
                 }
+                
+                // 即使动作失败或者没有 detail（如 finish），也要保存当前截图作为历史记录
                 savedImagePath = if (markedBitmap != null) {
                     val path = BitmapUtils.saveBitmap(getApplication(), markedBitmap)
                     markedBitmap.recycle()
                     path
-                } else BitmapUtils.saveBitmap(getApplication(), originalScreenshot)
+                } else {
+                    BitmapUtils.saveBitmap(getApplication(), originalScreenshot)
+                }
             }
-            
+
             if (modelScreenshot != null && modelScreenshot != originalScreenshot) modelScreenshot.recycle()
 
             val stepTotalDuration = System.currentTimeMillis() - stepStartTime
@@ -543,7 +552,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 scaledWidth = scaledWidth,
                 scaledHeight = scaledHeight
             )
-            
+
             _uiState.value = _uiState.value.copy(messages = _uiState.value.messages + assistantMessage)
             saveCurrentMessages()
 
@@ -554,7 +563,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 executor?.bringAppToForeground()
                 return
             }
-            
+
             if (result.message != null && (result.message!!.contains("完成") || result.message!!.contains("finish"))) {
                 val completionMessage = result.message ?: "任务已完成"
                 FloatingWindowService.getInstance()?.updateStatus("已完成", stepCount, completionMessage)
@@ -562,7 +571,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 executor?.bringAppToForeground()
                 return
             }
-            
+
             if (!result.success) {
                 retryCount++
                 if (retryCount >= 10) {
@@ -575,20 +584,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 retryCount = 0
             }
-            
+
             delay(1000)
             stepCount++
         }
-        
+
         FloatingWindowService.getInstance()?.updateStatus("已停止", stepCount, "达到最大步数限制")
         _uiState.value = _uiState.value.copy(isLoading = false, error = "达到最大步数限制")
         executor?.bringAppToForeground()
     }
-    
+
     fun getFullPromptLog(): String {
         val messages = _uiState.value.messages
         if (messages.isEmpty()) return ""
-        
+
         return buildString {
             messages.forEach { msg ->
                 append("[${msg.role}]:\n")
@@ -596,7 +605,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     append("<thinking>\n${msg.thinking}\n</thinking>\n")
                 }
                 append(msg.content)
-                
+
                 // 如果是助手消息，显示指标
                 if (msg.role == MessageRole.ASSISTANT && msg.totalMs > 0) {
                     append("\n\n[METRICS]:")
@@ -625,19 +634,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (funcMatch != null) return funcMatch.groupValues[1]
         return null
     }
-    
+
     private fun resultMessageFallback(action: String): String {
         return if (action.length > 80) action.take(80) + "..." else action.ifBlank { "任务已完成" }
     }
-    
+
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
     }
-    
+
     fun clearTaskCompletedMessage() {
         _uiState.value = _uiState.value.copy(taskCompletedMessage = null)
     }
-    
+
     fun clearMessages() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(messages = emptyList(), error = null, taskCompletedMessage = null)
@@ -645,7 +654,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             saveCurrentMessages()
         }
     }
-    
+
     fun refreshModelClient() {
         viewModelScope.launch {
             val baseUrl = preferencesRepository.getBaseUrlSync()

@@ -404,10 +404,10 @@ public class Main {
         try {
             Context context = FakeContext.get();
             Intent intent = new Intent(ACTION_SHOWER_BINDER_READY);
-            intent.setPackage("com.ai.assistance.operit");
+            intent.setPackage("com.example.open_autoglm_android");
             intent.putExtra(EXTRA_BINDER_CONTAINER, new ShowerBinderContainer(service.asBinder()));
             context.sendBroadcast(intent);
-            logToFile("Sent SHOWER_BINDER_READY broadcast to com.ai.assistance.operit via Context.sendBroadcast", null);
+            logToFile("Sent SHOWER_BINDER_READY broadcast to com.example.open_autoglm_android via Context.sendBroadcast", null);
         } catch (Throwable t) {
             logToFile("Failed to send SHOWER_BINDER_READY broadcast: " + t.getMessage(), t);
         }
@@ -459,11 +459,12 @@ public class Main {
                     | VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
                     | VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH
                     | VIRTUAL_DISPLAY_FLAG_ROTATES_WITH_CONTENT
-                    | VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL;
+                    | VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL
+                    | VIRTUAL_DISPLAY_FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
+                    | VIRTUAL_DISPLAY_FLAG_TRUSTED;
 
             if (Build.VERSION.SDK_INT >= 33) {
-                flags |= VIRTUAL_DISPLAY_FLAG_TRUSTED
-                        | VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP
+                flags |= VIRTUAL_DISPLAY_FLAG_OWN_DISPLAY_GROUP
                         | VIRTUAL_DISPLAY_FLAG_ALWAYS_UNLOCKED
                         | VIRTUAL_DISPLAY_FLAG_TOUCH_FEEDBACK_DISABLED;
             }
@@ -527,43 +528,40 @@ public class Main {
      */
 
     private void encodeLoop() {
-        MediaCodec codec = videoEncoder;
-        if (codec == null) {
-            return;
-        }
-
-        BufferInfo bufferInfo = new BufferInfo();
-
         while (encoderRunning) {
-            int index;
-            try {
-                index = codec.dequeueOutputBuffer(bufferInfo, 10_000);
-            } catch (IllegalStateException e) {
-                logToFile("dequeueOutputBuffer failed: " + e.getMessage(), e);
-                break;
+            MediaCodec codec = videoEncoder;
+            if (codec == null) {
+                try { Thread.sleep(100); } catch (Exception ignored) {}
+                continue;
             }
 
-            if (index == MediaCodec.INFO_TRY_AGAIN_LATER) {
-                continue;
-            } else if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                MediaFormat format = codec.getOutputFormat();
-                trySendConfig(format);
-            } else if (index >= 0) {
-                if (bufferInfo.size > 0) {
-                    ByteBuffer outputBuffer = codec.getOutputBuffer(index);
-                    if (outputBuffer != null) {
-                        outputBuffer.position(bufferInfo.offset);
-                        outputBuffer.limit(bufferInfo.offset + bufferInfo.size);
-                        byte[] data = new byte[bufferInfo.size];
-                        outputBuffer.get(data);
-                        sendVideoFrame(data);
+            BufferInfo bufferInfo = new BufferInfo();
+            try {
+                int index = codec.dequeueOutputBuffer(bufferInfo, 10_000);
+                if (index == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                    continue;
+                } else if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    MediaFormat format = codec.getOutputFormat();
+                    trySendConfig(format);
+                } else if (index >= 0) {
+                    if (bufferInfo.size > 0) {
+                        ByteBuffer outputBuffer = codec.getOutputBuffer(index);
+                        if (outputBuffer != null) {
+                            outputBuffer.position(bufferInfo.offset);
+                            outputBuffer.limit(bufferInfo.offset + bufferInfo.size);
+                            byte[] data = new byte[bufferInfo.size];
+                            outputBuffer.get(data);
+                            sendVideoFrame(data);
+                        }
                     }
+                    codec.releaseOutputBuffer(index, false);
                 }
-                codec.releaseOutputBuffer(index, false);
-
-                if ((bufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                    break;
-                }
+            } catch (IllegalStateException e) {
+                logToFile("dequeueOutputBuffer transient error: " + e.getMessage(), null);
+                try { Thread.sleep(50); } catch (Exception ignored) {}
+            } catch (Exception e) {
+                logToFile("encodeLoop unexpected error", e);
+                break;
             }
         }
     }
@@ -647,39 +645,44 @@ public class Main {
     private void launchPackageOnVirtualDisplay(String packageName) {
         logToFile("launchPackageOnVirtualDisplay: " + packageName, null);
         try {
-            if (virtualDisplay == null || virtualDisplay.getDisplay() == null || virtualDisplayId == -1) {
+            if (virtualDisplay == null || virtualDisplayId == -1) {
                 logToFile("launchPackageOnVirtualDisplay: no virtual display", null);
                 return;
             }
 
+            // 方案 1: 最暴力 Shell 启动
+            try {
+                String cmd = "am start --display " + virtualDisplayId + 
+                             " -f 0x10008000 " + 
+                             " -n $(cmd package resolve-activity --brief " + packageName + " | tail -n 1)";
+                logToFile("Executing Force Shell launch: " + cmd, null);
+                Runtime.getRuntime().exec(new String[]{"sh", "-c", cmd});
+                Thread.sleep(200);
+            } catch (Exception e) {
+                logToFile("Shell launch failed: " + e.getMessage(), null);
+            }
+
+            // 方案 2: 使用 monkey 强行唤起
+            try {
+                String monkeyCmd = "monkey -p " + packageName + " -c android.intent.category.LAUNCHER 1";
+                Runtime.getRuntime().exec(new String[]{"sh", "-c", monkeyCmd});
+            } catch (Exception ignored) {}
+
+            // 方案 3: 标准反射启动
             PackageManager pm = appContext.getPackageManager();
-            if (pm == null) {
-                logToFile("launchPackageOnVirtualDisplay: PackageManager is null", null);
-                return;
-            }
-
             Intent intent = pm.getLaunchIntentForPackage(packageName);
-            if (intent == null) {
-                logToFile("launchPackageOnVirtualDisplay: no launch intent for " + packageName, null);
-                return;
-            }
-
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-
-            android.os.Bundle options = null;
-            if (Build.VERSION.SDK_INT >= 26) {
+            if (intent != null) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
                 android.app.ActivityOptions launchOptions = android.app.ActivityOptions.makeBasic();
                 launchOptions.setLaunchDisplayId(virtualDisplayId);
-                options = launchOptions.toBundle();
+                
+                com.ai.assistance.shower.wrappers.ActivityManager am = ServiceManager.getActivityManager();
+                if (am != null) {
+                    am.startActivity(intent, launchOptions.toBundle());
+                }
             }
-
-            com.ai.assistance.shower.wrappers.ActivityManager am = ServiceManager.getActivityManager();
-            // Do not force-stop for now; mirror scrcpy Device.startApp(forceStop=false)
-            am.startActivity(intent, options);
-
-            logToFile("launchPackageOnVirtualDisplay: started " + packageName + " on display " + virtualDisplayId, null);
         } catch (Exception e) {
-            logToFile("launchPackageOnVirtualDisplay failed: " + e.getMessage(), e);
+            logToFile("launchPackageOnVirtualDisplay fatal error: " + e.getMessage(), e);
         }
     }
 
